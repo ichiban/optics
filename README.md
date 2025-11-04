@@ -101,3 +101,9 @@ func main() {
 	}
 }
 ```
+
+```
+{name: alice, age: 31}
+{name: bob, age: 41}
+{name: charlie}
+```
