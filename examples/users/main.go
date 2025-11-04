@@ -1,15 +1,3 @@
-# Optics
-
-An experimental optics library in Go.
-
-To make it work in Go, we made some alterations:
-
-- Functions take an additional contextual value `C` which doesn't have to be `context.Context`.
-- Functions may return an `error`.
-
-## Example
-
-```go
 package main
 
 import (
@@ -100,4 +88,3 @@ func main() {
 		fmt.Println(u)
 	}
 }
-```

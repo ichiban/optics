@@ -1,77 +1,68 @@
 package optics
 
-import (
-	"maps"
-	"slices"
-)
-
-type Lens[A, B any] struct {
-	Get func(A) (B, bool)
-	Set func(A, B) (A, bool)
+// Lens focuses a single substructure of S of type A.
+// It takes a context value C and may return an error.
+type Lens[C, S, A any] struct {
+	View   func(C, S) (A, error)
+	Update func(C, S, A) (S, error)
 }
 
-func Slice[S []T, T any](i int) Lens[S, T] {
-	return Lens[S, T]{
-		Get: func(s S) (T, bool) {
-			if i < 0 || i >= len(s) {
-				var zero T
-				return zero, false
+// Over modifies the focused value with f.
+func (l Lens[C, S, A]) Over(c C, s S, f func(C, A) (A, error)) (S, error) {
+	a, err := l.View(c, s)
+	if err != nil {
+		return s, err
+	}
+	a, err = f(c, a)
+	if err != nil {
+		return s, err
+	}
+	return l.Update(c, s, a)
+}
+
+// ComposeLensLens composes two lenses.
+func ComposeLensLens[C, S, A, B any](l1 Lens[C, S, A], l2 Lens[C, A, B]) Lens[C, S, B] {
+	return Lens[C, S, B]{
+		View: func(c C, s S) (B, error) {
+			a, err := l1.View(c, s)
+			if err != nil {
+				var b B
+				return b, err
 			}
-			return s[i], true
+			return l2.View(c, a)
 		},
-		Set: func(s S, t T) (S, bool) {
-			if i < 0 || i >= len(s) {
-				return s, false
+		Update: func(c C, s S, b B) (S, error) {
+			a, err := l1.View(c, s)
+			if err != nil {
+				return s, err
 			}
-			c := slices.Clone(s)
-			c[i] = t
-			return c, true
+			a, err = l2.Update(c, a, b)
+			if err != nil {
+				return s, err
+			}
+			return l1.Update(c, s, a)
 		},
 	}
 }
 
-func Map[M map[K]V, K comparable, V any](k K) Lens[M, V] {
-	return Lens[M, V]{
-		Get: func(m M) (V, bool) {
-			v, ok := m[k]
-			return v, ok
-		},
-		Set: func(m M, v V) (M, bool) {
-			c := maps.Clone(m)
-			c[k] = v
-			return c, true
-		},
-	}
-}
-
-func Modify[A, B any](a A, l Lens[A, B], f func(B) B) (A, bool) {
-	v, ok := l.Get(a)
-	if !ok {
-		return a, false
-	}
-	return l.Set(a, f(v))
-}
-
-func Compose[A, B, C any](l1 Lens[A, B], l2 Lens[B, C]) Lens[A, C] {
-	return Lens[A, C]{
-		Get: func(a A) (C, bool) {
-			b, ok := l1.Get(a)
-			if !ok {
-				var zero C
-				return zero, false
+// ComposeLensPrism composes a lens and prism.
+func ComposeLensPrism[C, S, A, B any](l Lens[C, S, A], p Prism[C, A, B]) Prism[C, S, B] {
+	return Prism[C, S, B]{
+		Match: func(c C, s S) (B, error) {
+			a, err := l.View(c, s)
+			if err != nil {
+				var b B
+				return b, err
 			}
-			return l2.Get(b)
+			return p.Match(c, a)
 		},
-		Set: func(a A, c C) (A, bool) {
-			b, ok := l1.Get(a)
-			if !ok {
-				return a, false
+		Build: func(c C, b B) (S, error) {
+			var s S
+			a, err := p.Build(c, b)
+			if err != nil {
+				return s, err
 			}
-			b, ok = l2.Set(b, c)
-			if !ok {
-				return a, false
-			}
-			return l1.Set(a, b)
+			return l.Update(c, s, a)
 		},
 	}
 }
