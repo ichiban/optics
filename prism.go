@@ -128,3 +128,18 @@ func ComposePrismTraversal[C, S, A, B any](p Prism[C, S, A], t Traversal[C, A, B
 		},
 	}
 }
+
+func Optional[C, T any]() Prism[C, *T, T] {
+	return Prism[C, *T, T]{
+		Match: func(_ C, t *T) (T, error) {
+			if t == nil {
+				var zero T
+				return zero, ErrNoMatch
+			}
+			return *t, nil
+		},
+		Build: func(_ C, t T) (*T, error) {
+			return &t, nil
+		},
+	}
+}

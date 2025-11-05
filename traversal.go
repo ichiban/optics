@@ -1,6 +1,8 @@
 package optics
 
-import "errors"
+import (
+	"errors"
+)
 
 // Traversal modifies 0..n focuses, returning the updated S and how many were hit.
 // It takes a contextual value C and may return an error.
@@ -61,6 +63,25 @@ func ComposeTraversalTraversal[C, S, A, B any](t Traversal[C, S, A], u Traversal
 			return t.Modify(c, s, func(c C, a A) (A, error) {
 				return u.Modify(c, a, f)
 			})
+		},
+	}
+}
+
+func Each[C any, S ~[]T, T any]() Traversal[C, S, T] {
+	return Traversal[C, S, T]{
+		Modify: func(c C, ts S, f func(C, T) (T, error)) (S, error) {
+			if len(ts) == 0 {
+				return ts, nil
+			}
+			cs := make(S, len(ts))
+			for i, t := range ts {
+				t, err := f(c, t)
+				if err != nil {
+					return nil, err
+				}
+				cs[i] = t
+			}
+			return cs, nil
 		},
 	}
 }
