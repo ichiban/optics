@@ -1,81 +1,82 @@
 package optics
 
 import (
+	"context"
 	"errors"
 )
 
 // Traversal modifies 0..n focuses, returning the updated S and how many were hit.
 // It takes a contextual value C and may return an error.
-type Traversal[C, S, A any] struct {
-	Modify func(C, S, func(C, A) (A, error)) (S, error)
+type Traversal[S, A any] struct {
+	Modify func(context.Context, S, func(context.Context, A) (A, error)) (S, error)
 }
 
 // Over is a convenience alias for Modify.
-func (t Traversal[C, S, A]) Over(c C, s S, f func(C, A) (A, error)) (S, error) {
-	return t.Modify(c, s, f)
+func (t Traversal[S, A]) Over(ctx context.Context, s S, f func(context.Context, A) (A, error)) (S, error) {
+	return t.Modify(ctx, s, f)
 }
 
 // ComposeTraversalLens composes a Traversal and Lens and returns a Traversal.
-func ComposeTraversalLens[C, S, A, B any](t Traversal[C, S, A], l Lens[C, A, B]) Traversal[C, S, B] {
-	return Traversal[C, S, B]{
-		Modify: func(c C, s S, f func(C, B) (B, error)) (S, error) {
-			return t.Modify(c, s, func(c C, a A) (A, error) {
-				b, err := l.View(c, a)
+func ComposeTraversalLens[S, A, B any](t Traversal[S, A], l Lens[A, B]) Traversal[S, B] {
+	return Traversal[S, B]{
+		Modify: func(ctx context.Context, s S, f func(context.Context, B) (B, error)) (S, error) {
+			return t.Modify(ctx, s, func(ctx context.Context, a A) (A, error) {
+				b, err := l.View(ctx, a)
 				if err != nil {
 					return a, err
 				}
-				b, err = f(c, b)
+				b, err = f(ctx, b)
 				if err != nil {
 					return a, err
 				}
-				return l.Update(c, a, b)
+				return l.Update(ctx, a, b)
 			})
 		},
 	}
 }
 
 // ComposeTraversalPrism composes a Traversal and Prism and returns a Traversal.
-func ComposeTraversalPrism[C, S, A, B any](t Traversal[C, S, A], p Prism[C, A, B]) Traversal[C, S, B] {
-	return Traversal[C, S, B]{
-		Modify: func(c C, s S, f func(C, B) (B, error)) (S, error) {
-			return t.Modify(c, s, func(c C, a A) (A, error) {
-				b, err := p.Match(c, a)
+func ComposeTraversalPrism[S, A, B any](t Traversal[S, A], p Prism[A, B]) Traversal[S, B] {
+	return Traversal[S, B]{
+		Modify: func(ctx context.Context, s S, f func(context.Context, B) (B, error)) (S, error) {
+			return t.Modify(ctx, s, func(ctx context.Context, a A) (A, error) {
+				b, err := p.Match(ctx, a)
 				if err != nil {
 					if errors.Is(err, ErrNoMatch) {
 						return a, nil
 					}
 					return a, err
 				}
-				b, err = f(c, b)
+				b, err = f(ctx, b)
 				if err != nil {
 					return a, err
 				}
-				return p.Build(c, b)
+				return p.Build(ctx, b)
 			})
 		},
 	}
 }
 
 // ComposeTraversalTraversal composes two Traversals and returns a Traversal.
-func ComposeTraversalTraversal[C, S, A, B any](t Traversal[C, S, A], u Traversal[C, A, B]) Traversal[C, S, B] {
-	return Traversal[C, S, B]{
-		Modify: func(c C, s S, f func(C, B) (B, error)) (S, error) {
-			return t.Modify(c, s, func(c C, a A) (A, error) {
-				return u.Modify(c, a, f)
+func ComposeTraversalTraversal[S, A, B any](t Traversal[S, A], u Traversal[A, B]) Traversal[S, B] {
+	return Traversal[S, B]{
+		Modify: func(ctx context.Context, s S, f func(context.Context, B) (B, error)) (S, error) {
+			return t.Modify(ctx, s, func(ctx context.Context, a A) (A, error) {
+				return u.Modify(ctx, a, f)
 			})
 		},
 	}
 }
 
-func Each[C any, S ~[]T, T any]() Traversal[C, S, T] {
-	return Traversal[C, S, T]{
-		Modify: func(c C, ts S, f func(C, T) (T, error)) (S, error) {
+func Each[S ~[]T, T any]() Traversal[S, T] {
+	return Traversal[S, T]{
+		Modify: func(ctx context.Context, ts S, f func(context.Context, T) (T, error)) (S, error) {
 			if len(ts) == 0 {
 				return ts, nil
 			}
 			cs := make(S, len(ts))
 			for i, t := range ts {
-				t, err := f(c, t)
+				t, err := f(ctx, t)
 				if err != nil {
 					return nil, err
 				}

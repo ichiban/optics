@@ -1,144 +1,147 @@
 package optics
 
-import "errors"
+import (
+	"context"
+	"errors"
+)
 
 var ErrNoMatch = errors.New("optics: no match")
 
 // Prism captures a partial focus (sum/variant) with a builder (Build).
 // It takes a contextual value C and may return an error.
-type Prism[C, S, A any] struct {
+type Prism[S, A any] struct {
 	// Match returns (a, nil) when S carries A, otherwise (zero, ErrNoMatch).
-	Match func(C, S) (A, error)
+	Match func(context.Context, S) (A, error)
 	// Build builds an S from an A (i.e., the constructor for the variant).
-	Build func(C, A) (S, error)
+	Build func(context.Context, A) (S, error)
 }
 
 // Preview reads A if present.
-func (p Prism[C, S, A]) Preview(c C, s S) (A, error) {
-	return p.Match(c, s)
+func (p Prism[S, A]) Preview(ctx context.Context, s S) (A, error) {
+	return p.Match(ctx, s)
 }
 
 // Over maps A inside S if present.
-func (p Prism[C, S, A]) Over(c C, s S, f func(A) (A, error)) (S, error) {
-	if a, err := p.Match(c, s); err != nil {
-		a, err = f(a)
+func (p Prism[S, A]) Over(ctx context.Context, s S, f func(context.Context, A) (A, error)) (S, error) {
+	if a, err := p.Match(ctx, s); err != nil {
+		a, err = f(ctx, a)
 		if err != nil {
 			return s, err
 		}
-		return p.Build(c, a)
+		return p.Build(ctx, a)
 	}
 	return s, nil
 }
 
-func (p Prism[C, S, A]) Traversal() Traversal[C, S, A] {
-	return Traversal[C, S, A]{
-		Modify: func(c C, s S, f func(C, A) (A, error)) (S, error) {
-			a, err := p.Match(c, s)
+func (p Prism[S, A]) Traversal() Traversal[S, A] {
+	return Traversal[S, A]{
+		Modify: func(ctx context.Context, s S, f func(context.Context, A) (A, error)) (S, error) {
+			a, err := p.Match(ctx, s)
 			if err != nil {
 				if errors.Is(err, ErrNoMatch) {
 					return s, nil
 				}
 				return s, err
 			}
-			a, err = f(c, a)
+			a, err = f(ctx, a)
 			if err != nil {
 				return s, err
 			}
-			return p.Build(c, a)
+			return p.Build(ctx, a)
 		},
 	}
 }
 
 // Modify runs f on the focus if present; returns (updated, hitCount 0|1).
-func (p Prism[C, S, A]) Modify(c C, s S, f func(C, A) (A, error)) (S, error) {
-	a, err := p.Match(c, s)
+func (p Prism[S, A]) Modify(ctx context.Context, s S, f func(context.Context, A) (A, error)) (S, error) {
+	a, err := p.Match(ctx, s)
 	if err != nil {
 		if errors.Is(err, ErrNoMatch) {
 			return s, nil
 		}
 		return s, err
 	}
-	a, err = f(c, a)
+	a, err = f(ctx, a)
 	if err != nil {
 		return s, err
 	}
-	return p.Build(c, a)
+	return p.Build(ctx, a)
 }
 
 // ComposePrismLens composes a Prism and Lens and returns a Prism.
-func ComposePrismLens[C, S, A, B any](p Prism[C, S, A], l Lens[C, A, B]) Prism[C, S, B] {
-	return Prism[C, S, B]{
-		Match: func(c C, s S) (B, error) {
-			a, err := p.Match(c, s)
+func ComposePrismLens[S, A, B any](p Prism[S, A], l Lens[A, B]) Prism[S, B] {
+	return Prism[S, B]{
+		Match: func(ctx context.Context, s S) (B, error) {
+			a, err := p.Match(ctx, s)
 			if err != nil {
 				var z B
 				return z, err
 			}
-			return l.View(c, a)
+			return l.View(ctx, a)
 		},
-		Build: func(c C, b B) (S, error) {
+		Build: func(ctx context.Context, b B) (S, error) {
 			var a A
-			a, err := l.Update(c, a, b)
+			a, err := l.Update(ctx, a, b)
 			if err != nil {
 				var s S
 				return s, err
 			}
-			return p.Build(c, a)
+			return p.Build(ctx, a)
 		},
 	}
 }
 
 // ComposePrismPrism composes two Prisms and returns a Prism.
-func ComposePrismPrism[C, S, A, B any](p Prism[C, S, A], q Prism[C, A, B]) Prism[C, S, B] {
-	return Prism[C, S, B]{
-		Match: func(c C, s S) (B, error) {
-			a, err := p.Match(c, s)
+func ComposePrismPrism[S, A, B any](p Prism[S, A], q Prism[A, B]) Prism[S, B] {
+	return Prism[S, B]{
+		Match: func(ctx context.Context, s S) (B, error) {
+			a, err := p.Match(ctx, s)
 			if err != nil {
 				var b B
 				return b, err
 			}
-			return q.Match(c, a)
+			return q.Match(ctx, a)
 		},
-		Build: func(c C, b B) (S, error) {
-			a, err := q.Build(c, b)
+		Build: func(ctx context.Context, b B) (S, error) {
+			a, err := q.Build(ctx, b)
 			if err != nil {
 				var s S
 				return s, err
 			}
-			return p.Build(c, a)
+			return p.Build(ctx, a)
 		},
 	}
 }
 
 // ComposePrismTraversal composes a Prism and Traversal and returns a Traversal.
-func ComposePrismTraversal[C, S, A, B any](p Prism[C, S, A], t Traversal[C, A, B]) Traversal[C, S, B] {
-	return Traversal[C, S, B]{
-		Modify: func(c C, s S, f func(C, B) (B, error)) (S, error) {
-			a, err := p.Match(c, s)
+func ComposePrismTraversal[S, A, B any](p Prism[S, A], t Traversal[A, B]) Traversal[S, B] {
+	return Traversal[S, B]{
+		Modify: func(ctx context.Context, s S, f func(context.Context, B) (B, error)) (S, error) {
+			a, err := p.Match(ctx, s)
 			if err != nil {
 				var s S
 				return s, err
 			}
-			a, err = t.Modify(c, a, f)
+			a, err = t.Modify(ctx, a, f)
 			if err != nil {
 				var s S
 				return s, err
 			}
-			return p.Build(c, a)
+			return p.Build(ctx, a)
 		},
 	}
 }
 
-func Optional[C, T any]() Prism[C, *T, T] {
-	return Prism[C, *T, T]{
-		Match: func(_ C, t *T) (T, error) {
-			if t == nil {
+func Optional[S ~*T, T any]() Prism[S, T] {
+	return Prism[S, T]{
+		Match: func(_ context.Context, s S) (T, error) {
+			if s == nil {
 				var zero T
 				return zero, ErrNoMatch
 			}
-			return *t, nil
+			return *s, nil
 		},
-		Build: func(_ C, t T) (*T, error) {
+		Build: func(_ context.Context, t T) (S, error) {
 			return &t, nil
 		},
 	}

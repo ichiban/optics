@@ -1,16 +1,20 @@
 package optics
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
-func LensLaws[C, S, A any](t *testing.T, l Lens[C, S, A], c C, s S, a [3]A, eqS func(S, S) bool, eqA func(A, A) bool) {
+func LensLaws[C, S, A any](t *testing.T, l Lens[S, A], c C, s S, a [3]A, eqS func(S, S) bool, eqA func(A, A) bool) {
 	t.Helper()
 
 	t.Run("View/Update", func(t *testing.T) {
-		a, err := l.View(c, s)
+		ctx := t.Context()
+		a, err := l.View(ctx, s)
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := l.Update(c, s, a)
+		got, err := l.Update(ctx, s, a)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -20,11 +24,12 @@ func LensLaws[C, S, A any](t *testing.T, l Lens[C, S, A], c C, s S, a [3]A, eqS 
 	})
 
 	t.Run("Update/View", func(t *testing.T) {
-		s, err := l.Update(c, s, a[0])
+		ctx := t.Context()
+		s, err := l.Update(ctx, s, a[0])
 		if err != nil {
 			t.Fatal(err)
 		}
-		g, err := l.View(c, s)
+		g, err := l.View(ctx, s)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -34,15 +39,16 @@ func LensLaws[C, S, A any](t *testing.T, l Lens[C, S, A], c C, s S, a [3]A, eqS 
 	})
 
 	t.Run("Update/Update", func(t *testing.T) {
-		s, err := l.Update(c, s, a[1])
+		ctx := t.Context()
+		s, err := l.Update(ctx, s, a[1])
 		if err != nil {
 			t.Fatal(err)
 		}
-		p3, err := l.Update(c, s, a[2])
+		p3, err := l.Update(ctx, s, a[2])
 		if err != nil {
 			t.Fatal(err)
 		}
-		p4, err := l.Update(c, s, a[2])
+		p4, err := l.Update(ctx, s, a[2])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -54,11 +60,11 @@ func LensLaws[C, S, A any](t *testing.T, l Lens[C, S, A], c C, s S, a [3]A, eqS 
 
 func TestLensLawsOnPair(t *testing.T) {
 	type P struct{ X, Y int }
-	l := Lens[struct{}, P, int]{
-		View: func(_ struct{}, p P) (int, error) {
+	l := Lens[P, int]{
+		View: func(_ context.Context, p P) (int, error) {
 			return p.X, nil
 		},
-		Update: func(_ struct{}, p P, x int) (P, error) {
+		Update: func(_ context.Context, p P, x int) (P, error) {
 			p.X = x
 			return p, nil
 		},

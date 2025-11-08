@@ -1,19 +1,21 @@
 package optics
 
 import (
+	"context"
 	"errors"
 	"testing"
 )
 
-func PrismLaw[C, S, A any](t *testing.T, p Prism[C, S, A], c C, s S, a A, eqA func(A, A) bool, eqS func(S, S) bool) {
+func PrismLaw[S, A any](t *testing.T, p Prism[S, A], s S, a A, eqA func(A, A) bool, eqS func(S, S) bool) {
 	t.Helper()
 
 	t.Run("Match/Build", func(t *testing.T) {
-		s, err := p.Build(c, a)
+		ctx := t.Context()
+		s, err := p.Build(ctx, a)
 		if err != nil {
 			t.Fatal(err)
 		}
-		m, err := p.Match(c, s)
+		m, err := p.Match(ctx, s)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -23,11 +25,12 @@ func PrismLaw[C, S, A any](t *testing.T, p Prism[C, S, A], c C, s S, a A, eqA fu
 	})
 
 	t.Run("Build/Match", func(t *testing.T) {
-		a, err := p.Match(c, s)
+		ctx := t.Context()
+		a, err := p.Match(ctx, s)
 		if err != nil {
 			t.Fatal(err)
 		}
-		b, err := p.Build(c, a)
+		b, err := p.Build(ctx, a)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -38,19 +41,19 @@ func PrismLaw[C, S, A any](t *testing.T, p Prism[C, S, A], c C, s S, a A, eqA fu
 }
 
 func TestPrismLawsOnPointer(t *testing.T) {
-	p := Prism[struct{}, *int, int]{
-		Match: func(_ struct{}, i *int) (int, error) {
+	p := Prism[*int, int]{
+		Match: func(_ context.Context, i *int) (int, error) {
 			if i == nil {
 				return 0, errors.New("nil pointer")
 			}
 			return *i, nil
 		},
-		Build: func(_ struct{}, i int) (*int, error) {
+		Build: func(_ context.Context, i int) (*int, error) {
 			return &i, nil
 		},
 	}
 	n := 42
-	PrismLaw(t, p, struct{}{}, &n, 7, func(i int, j int) bool {
+	PrismLaw(t, p, &n, 7, func(i int, j int) bool {
 		return i == j
 	}, func(i *int, j *int) bool {
 		switch {

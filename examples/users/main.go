@@ -23,7 +23,7 @@ func some[T any](t T) *T {
 	return &t
 }
 
-var age = optics.Lens[context.Context, user, *int]{
+var age = optics.Lens[user, *int]{
 	View: func(ctx context.Context, user user) (*int, error) {
 		return user.age, nil
 	},
@@ -48,9 +48,9 @@ func main() {
 			age:  nil,
 		},
 	}
-	users := optics.Each[context.Context, []user]()
+	users := optics.Each[[]user]()
 	usersAge := optics.ComposeTraversalLens(users, age)
-	someInt := optics.Optional[context.Context, int]()
+	someInt := optics.Optional[*int]()
 	someUsersAge := optics.ComposeTraversalPrism(usersAge, someInt)
 	us, err := someUsersAge.Over(context.Background(), us, func(ctx context.Context, i int) (int, error) {
 		return i + 1, nil
