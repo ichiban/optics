@@ -23,15 +23,7 @@ func some[T any](t T) *T {
 	return &t
 }
 
-var age = optics.Lens[user, *int]{
-	View: func(ctx context.Context, user user) (*int, error) {
-		return user.age, nil
-	},
-	Update: func(ctx context.Context, user user, i *int) (user, error) {
-		user.age = i
-		return user, nil
-	},
-}
+//go:generate go tool github.com/ichiban/optics/cmd/opticsgen -type user
 
 func main() {
 	us := []user{
@@ -49,7 +41,7 @@ func main() {
 		},
 	}
 	users := optics.Each[[]user]()
-	usersAge := optics.ComposeTraversalLens(users, age)
+	usersAge := optics.ComposeTraversalLens(users, userAge)
 	someInt := optics.Optional[*int]()
 	someUsersAge := optics.ComposeTraversalPrism(usersAge, someInt)
 	us, err := someUsersAge.Over(context.Background(), us, func(ctx context.Context, i int) (int, error) {
